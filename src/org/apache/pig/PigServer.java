@@ -29,6 +29,11 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
@@ -675,32 +680,63 @@ public class PigServer {
      * @return String containing Pig Latin with substitutions done
      * @throws IOException
      */
-    protected String doParamSubstitution(InputStream in,
-                                         Map<String,String> params,
-                                         List<String> paramsFiles) throws IOException {
-        // transform the map type to list type which can been accepted by ParameterSubstitutionPreprocessor
-        List<String> paramList = new ArrayList<String>();
-        if (params != null) {
-            for (Map.Entry<String, String> entry : params.entrySet()) {
-                paramList.add(entry.getKey() + "=" + entry.getValue());
-             }
-        }
+	protected String doParamSubstitution(InputStream in,
+			Map<String, String> params, List<String> paramsFiles)
+			throws IOException {
+		// transform the map type to list type which can been accepted by
+		// ParameterSubstitutionPreprocessor
+		List<String> paramList = new ArrayList<String>();
+		if (params != null) {
+			for (Map.Entry<String, String> entry : params.entrySet()) {
+				paramList.add(entry.getKey() + "=" + entry.getValue());
+			}
+		}
 
-        // do parameter substitution
-        try {
-            ParameterSubstitutionPreprocessor psp = new ParameterSubstitutionPreprocessor(50);
-            StringWriter writer = new StringWriter();
-            psp.genSubstitutedFile(new BufferedReader(new InputStreamReader(in)),
-                                   writer,
-                                   paramList.size() > 0 ? paramList.toArray(new String[0]) : null,
-                                   paramsFiles!=null ? paramsFiles.toArray(new String[0]) : null);
+		// do parameter substitution
+		try {
+			ParameterSubstitutionPreprocessor psp = new ParameterSubstitutionPreprocessor(
+					50);
+			StringWriter writer = new StringWriter();
+			psp.genSubstitutedFile(new BufferedReader(new InputStreamReader(in,
+					"UTF-8")), writer,
+					paramList.size() > 0 ? paramList.toArray(new String[0])
+							: null,
+					paramsFiles != null ? paramsFiles.toArray(new String[0])
+							: null);
 
-            return writer.toString();
-        } catch (org.apache.pig.tools.parameters.ParseException e) {
-            log.error(e.getLocalizedMessage());
-            throw new IOException(e.getCause());
-        }
-    }
+			return translateEncodingOfPigLatin(writer.toString());
+		} catch (org.apache.pig.tools.parameters.ParseException e) {
+			log.error(e.getLocalizedMessage());
+			throw new IOException(e.getCause());
+		}
+	}
+
+	/*
+	 * Let pig which is deployed in windows OS support i18n. For instance, the
+	 * system encoding is windows-1252 in Windows OS (de_DE/fr_FR), and in
+	 * Windows OS (zh_CN) it is GBK. But, the hadoop adoption is UTF-8. We need
+	 * change system current encoding to suit hadoop encoding.
+	 */
+	private String translateEncodingOfPigLatin(final String pigLatin)
+			throws IOException {
+		if (System.getProperty("input.encoding",
+				Charset.defaultCharset().name()).equalsIgnoreCase(
+				"windows-1252")) {
+			String outputEncoding = "UTF-8";
+			String inputEncoding = "windows-1252";
+			Charset charsetOutput = Charset.forName(outputEncoding);
+			Charset charsetInput = Charset.forName(inputEncoding);
+			CharsetEncoder encoder = charsetOutput.newEncoder();
+			CharsetDecoder decoder = charsetInput.newDecoder();
+			// Convert the byte array from starting inputEncoding into UCS2
+			byte[] bufferToConvert = pigLatin.getBytes();
+			CharBuffer cbuf = decoder.decode(ByteBuffer.wrap(bufferToConvert));
+			// Convert the internal UCS2 representation into outputEncoding
+			ByteBuffer bbuf = encoder.encode(CharBuffer.wrap(cbuf));
+			return new String(bbuf.array(), 0, bbuf.limit(), charsetOutput);
+		}
+		return new String(pigLatin.getBytes("ISO-8859-1"), "UTF-8");
+	}
 
     /**
      * Creates a clone of the current DAG

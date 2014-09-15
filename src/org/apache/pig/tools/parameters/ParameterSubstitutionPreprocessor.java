@@ -28,6 +28,7 @@ import org.apache.log4j.Appender;
 import org.apache.log4j.Logger;
 
 import java.util.Hashtable;
+import java.io.InputStreamReader;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
@@ -120,7 +121,7 @@ public class ParameterSubstitutionPreprocessor {
     private void loadParamsFromFile(String filename) throws ParseException {
 
         try {
-            BufferedReader in = new BufferedReader(new FileReader(filename));
+        	BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(filename),"utf-8"));
             String line;
  
             paramParser.ReInit(in);
